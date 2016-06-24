@@ -250,7 +250,7 @@ class Test {
         self::registerQuitSignal();
         self::init();
     }
-
+    
 }
 
 Test::$preemptive = false;
