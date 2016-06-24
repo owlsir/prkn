@@ -80,7 +80,7 @@ class Test {
 
 
     /**
-     * run as a daemon
+     * Run as a daemon
      */
     protected static function daemon() {
         $pid = pcntl_fork();
@@ -104,7 +104,7 @@ class Test {
     }
 
     /**
-     * init shared memory and message queue.
+     * Init shared memory and message queue.
      */
     protected static function shareMemoryAndMessageQueue() {
         // Creates or open a shared memory segment.
@@ -123,7 +123,7 @@ class Test {
     }
 
     /**
-     * append proxy process id to variable of proxy in shared memory.
+     * Append proxy process id to variable of proxy in shared memory.
      * @param $proxyId int
      */
     protected static function appendProcessToShm($variable ,$proxyId) {
@@ -133,7 +133,7 @@ class Test {
     }
 
     /**
-     * create proxy process of subscribe client.
+     * Create proxy process of subscribe client.
      */
     protected static function subscribeProcess() {
         while (count(shm_get_var(self::$shmId, self::PROXY_PROCESS_VAR_KEY)) < 2) {
@@ -151,7 +151,7 @@ class Test {
     }
 
     /**
-     * create redis subscribe client.
+     * Create redis subscribe client.
      * @param $pid proxy process id
      */
     protected static function redisSubscribe($pid) {
@@ -173,7 +173,9 @@ class Test {
         });
     }
 
-
+    /**
+     * Create worker processes.
+     */
     protected static function workerProcess() {
         while (count(shm_get_var(self::$shmId, self::WORKER_PROCESS_VAR_KEY)) < self::$workerCount) {
             $pid = pcntl_fork();
@@ -187,11 +189,9 @@ class Test {
 
                     msg_receive(self::$queue, $desrireMsgType, $mesgtype, 100, $message, self::$queueSerialize, self::$msgIpcWait);
 
-                    // ... to do
-                    file_put_contents('1.txt', $workerProcessId."--".$message."\n", FILE_APPEND);
+                    // ... do something ...
+                    //file_put_contents('1.txt', $workerProcessId."--".$message."\n", FILE_APPEND);
 
-
-                    // usleep(1);
                 }
                 exit;
             }
@@ -218,7 +218,7 @@ class Test {
     }
 
     /**
-     * check all processes are alive and remove dead process id from shared memory.
+     * Check all processes are alive and remove dead process id from shared memory.
      * @param $variable
      */
     protected static function checkAliveAndDelProcessId($variable) {
@@ -230,7 +230,7 @@ class Test {
     }
 
     /**
-     * initialize.
+     * Initialize.
      */
     protected static function init() {
         while (true) {
@@ -242,7 +242,7 @@ class Test {
     }
 
     /**
-     * start program.
+     * Start program.
      */
     public static function run() {
         self::$daemonize && self::daemon();
