@@ -160,7 +160,7 @@ class Test {
         $shmId = self::$shmId;
         $redis->subscribe(['__keyevent@0__:expired'], function($pattern, $channel, $message) use ($pid) {
             $proxyIds = shm_get_var(self::$shmId, self::PROXY_PROCESS_VAR_KEY);
-            if ($pid == $proxyIds[0] || !posix_kill($proxyIds[1], 0)) {
+            if ($pid == $proxyIds[0] || !posix_kill($proxyIds[0], 0)) {
                 $errCode = 0;
                 $numSign = shm_get_var(self::$shmId, self::DISPATH_NUM_SIGN);
                 // need do something when the queue is blocking.
@@ -190,7 +190,7 @@ class Test {
                     msg_receive(self::$queue, $desrireMsgType, $mesgtype, 100, $message, self::$queueSerialize, self::$msgIpcWait);
 
                     // ... do something ...
-                    //file_put_contents('1.txt', $workerProcessId."--".$message."\n", FILE_APPEND);
+                    // file_put_contents('1.txt', $workerProcessId."--".$message."\n", FILE_APPEND);
 
                 }
                 exit;
@@ -250,7 +250,7 @@ class Test {
         self::registerQuitSignal();
         self::init();
     }
-    
+
 }
 
 Test::$preemptive = false;
