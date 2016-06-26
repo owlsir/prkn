@@ -11,13 +11,52 @@ class Test {
     public static $daemonize = false;
 
     /**
+     * A file path is used to convert to a System V IPC key;
+     * @var string
+     */
+    public static $ftokPath = '/tmp/prkn';
+
+    /**
+     * Turn on failed message log.
+     * @var bool
+     */
+    public static $onFailRecord = true;
+
+    /**
+     * A file path to record failed message.
+     * @var string
+     */
+    public static $msgFailRrecordPath = './log/msg_fail_record.rec';
+
+    /**
+     * Turn on log.
+     * @var bool
+     */
+    public static $onLog = true;
+
+    /**
+     * Log path.
+     * @var string
+     */
+    public static $logFile = './log/prkn.log';
+
+    /**
+     * Whether the master process is running.
+     * @var bool
+     */
+    protected static $masterRunning;
+
+    /**
      * number of worker processes;
      * @var int
      */
     public static $workerCount = 4;
 
-
-    public static $msgIpcWait = 0;
+    /**
+     * The optional flags allows you to pass flags to the low-level msgrcv system call when the program receive messages from message queue.
+     * @var int
+     */
+    public static $msgRecFlag = 0;
 
     /**
      * How the message is sent.
@@ -31,7 +70,7 @@ class Test {
      * and set the optional errorcode to MSG_EAGAIN, indicating that you should try to send your message again a little later on.
      * @var bool
      */
-    public static $queueBlocking = true;
+    public static $queueBlocking = false;
 
     /**
      * Preemptive task distribution for worker processes.
@@ -64,19 +103,29 @@ class Test {
     protected static $queue;
 
     /**
+     * The variable of master processes in shared memory.
+     */
+    const MASTER_PROCESS_VAR_KEY = 101;
+
+    /**
      * The variable of proxy processes in shared memory.
      */
-    const PROXY_PROCESS_VAR_KEY = 101;
+    const PROXY_PROCESS_VAR_KEY = 102;
 
     /**
      * The variable of worker processes in shared memory.
      */
-    const WORKER_PROCESS_VAR_KEY = 102;
+    const WORKER_PROCESS_VAR_KEY = 103;
 
     /**
      * The variable of number sign in shared memory.
      */
     const DISPATH_NUM_SIGN = 201;
+
+    /**
+     * The variable of command in shared memory.
+     */
+    const COMMAND_STOP_VAR_KEY = 301;
 
 
     /**
@@ -107,15 +156,13 @@ class Test {
      * Init shared memory and message queue.
      */
     protected static function shareMemoryAndMessageQueue() {
-        // Creates or open a shared memory segment.
-        self::$shmKey = $shmKey = ftok(__FILE__, 's');
-        self::$shmId = $shmId = shm_attach($shmKey);
+
         // Checks whether specific key exists.
-        shm_has_var($shmId, self::PROXY_PROCESS_VAR_KEY) && shm_remove_var($shmId, self::PROXY_PROCESS_VAR_KEY);
-        shm_put_var($shmId, self::PROXY_PROCESS_VAR_KEY, []);
-        shm_has_var($shmId, self::WORKER_PROCESS_VAR_KEY) && shm_remove_var($shmId, self::WORKER_PROCESS_VAR_KEY);
-        shm_put_var($shmId, self::WORKER_PROCESS_VAR_KEY, []);
-        !shm_has_var($shmId, self::DISPATH_NUM_SIGN) && shm_put_var($shmId, self::DISPATH_NUM_SIGN, 0);
+        shm_has_var(self::$shmId, self::PROXY_PROCESS_VAR_KEY) && shm_remove_var(self::$shmId, self::PROXY_PROCESS_VAR_KEY);
+        shm_put_var(self::$shmId, self::PROXY_PROCESS_VAR_KEY, []);
+        shm_has_var(self::$shmId, self::WORKER_PROCESS_VAR_KEY) && shm_remove_var(self::$shmId, self::WORKER_PROCESS_VAR_KEY);
+        shm_put_var(self::$shmId, self::WORKER_PROCESS_VAR_KEY, []);
+        !shm_has_var(self::$shmId, self::DISPATH_NUM_SIGN) && shm_put_var(self::$shmId, self::DISPATH_NUM_SIGN, 0);
 
         // Create or attach to a message queue.
         self::$msgKey = $msgKey = ftok(__FILE__, 'm');
@@ -124,7 +171,7 @@ class Test {
 
     /**
      * Append proxy process id to variable of proxy in shared memory.
-     * @param $proxyId int
+     * @param int $proxyId
      */
     protected static function appendProcessToShm($variable ,$proxyId) {
         $proxyIds = shm_get_var(self::$shmId, $variable);
@@ -136,7 +183,8 @@ class Test {
      * Create proxy process of subscribe client.
      */
     protected static function subscribeProcess() {
-        while (count(shm_get_var(self::$shmId, self::PROXY_PROCESS_VAR_KEY)) < 2) {
+        // when the proxy process number is less than 2 and the stop command is 0, the child process is created.
+        while (count(shm_get_var(self::$shmId, self::PROXY_PROCESS_VAR_KEY))<2 && !shm_get_var(self::$shmId, self::COMMAND_STOP_VAR_KEY)) {
             $pid = pcntl_fork();
             if ($pid == -1) {
                 exit("fork(2) fail.\n");
@@ -187,7 +235,7 @@ class Test {
                     $workerProcessIds = shm_get_var(self::$shmId, self::WORKER_PROCESS_VAR_KEY);
                     $desrireMsgType = self::$preemptive ? 0 : array_search($workerProcessId, $workerProcessIds, true)+1;
 
-                    msg_receive(self::$queue, $desrireMsgType, $mesgtype, 100, $message, self::$queueSerialize, self::$msgIpcWait);
+                    msg_receive(self::$queue, $desrireMsgType, $mesgtype, 100, $message, self::$queueSerialize, self::$msgRecFlag);
 
                     // ... do something ...
                     // file_put_contents('1.txt', $workerProcessId."--".$message."\n", FILE_APPEND);
@@ -219,7 +267,7 @@ class Test {
 
     /**
      * Check all processes are alive and remove dead process id from shared memory.
-     * @param $variable
+     * @param int $variable
      */
     protected static function checkAliveAndDelProcessId($variable) {
         $processIds = shm_get_var(self::$shmId, $variable);
@@ -230,9 +278,10 @@ class Test {
     }
 
     /**
-     * Initialize.
+     * Master process.
+     * Monitor child processes.
      */
-    protected static function init() {
+    protected static function masterProcess() {
         while (true) {
             self::subscribeProcess();
             self::workerProcess();
@@ -241,14 +290,96 @@ class Test {
         }
     }
 
+
+    protected static function command() {
+        global $argv;
+        $command = ['start', 'stop', 'restart', 'status'];
+
+        (!isset($argv[1]) || !in_array($argv[1], $command)) && exit('Usage: '.$argv[0].' {'.join("|", $command).'}');
+
+        if (isset($argv[2]) && $argv[2]=='-d') self::$daemonize = true;
+
+        switch ($argv[0]) {
+            case 'start':
+                self::$masterRunning && self::cliOutputExit('The program aleady running');
+                break;
+            case 'stop':
+                shm_put_var(self::$shmId, self::COMMAND_STOP_VAR_KEY, 1);
+
+                // kill 
+                $proxyProcessIds = shm_get_var(self::$shmId, self::PROXY_PROCESS_VAR_KEY);
+                foreach ($proxyProcessIds as $key => $processId) {
+                    exec('kill -9 '.$processId);
+                }
+
+
+
+
+                shm_remove(self::$shmId);
+
+
+
+
+
+
+
+                break;
+            case 'restart':
+
+                break;
+            case 'status':
+
+                break;
+        }
+
+
+        self::$daemonize = isset($argv[2]) && $argv[2]=='-d' ? true : false;
+
+
+
+
+
+
+    }
+
+    /**
+     * Command line output and exit.
+     * @param string $message
+     * @param bool $exit
+     */
+    protected static function cliOutputExit($message, $exit=false) {
+        echo $message."\n";
+        $exit && exit;
+    }
+
+    /**
+     * Initializa.
+     */
+    protected static function init() {
+        !file_exists(self::$ftokPath) && !touch(self::$ftokPath) && self::cliOutputExit('Failed to create tmp file.');
+        self::$onFailRecord && !file_exists(self::$msgFailRrecordPath) && touch(self::$msgFailRrecordPath) && self::cliOutputExit('Failed to create the failed message log');
+
+        // creates or open a shared memory segment.
+        self::$shmKey = $shmKey = ftok(__FILE__, 's');
+        self::$shmId = $shmId = shm_attach($shmKey);
+        // shared momery of master process
+        $masterProcessId = shm_has_var($shmId, self::MASTER_PROCESS_VAR_KEY) ? shm_get_var($shmId, self::MASTER_PROCESS_VAR_KEY) : false;
+        // check the master process is alive.
+        self::$masterRunning = $shmId ? posix_kill($masterProcessId, 0) : false;
+
+        // initialize command stop status.
+        shm_put_var($shmId, self::COMMAND_STOP_VAR_KEY, 0);
+    }
+
     /**
      * Start program.
      */
     public static function run() {
+        self::init();
         self::$daemonize && self::daemon();
         self::shareMemoryAndMessageQueue();
         self::registerQuitSignal();
-        self::init();
+        self::masterProcess();
     }
 
 }
