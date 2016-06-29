@@ -210,7 +210,7 @@ class Test {
     }
 
     /**
-     * The worker process call this function when receive sigusr2 signal.
+     * The worker process call this function when receive SIGUSR2 signal.
      */
     protected static function workerStopCallBack() {
         self::$commandStop = true;
