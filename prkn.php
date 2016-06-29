@@ -385,7 +385,7 @@ class Test {
 
 }
 
-Test::$msgRecFlag = MSG_IPC_NOWAIT;
+//Test::$msgRecFlag = MSG_IPC_NOWAIT;
 Test::$preemptive = false;
 Test::run();
 
