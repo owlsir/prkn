@@ -25,6 +25,9 @@ return [
     // Preemptive task distribution for worker processes.
     // $desrireMsgType = $preemptive ? 0 : number;
     //'preemptive' => true,
+
+    // Database of redis used by PRKN.
+    'redisDb' => 0,
 ];
 
 

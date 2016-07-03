@@ -17,6 +17,12 @@ class Prkn {
     public static $daemonize = false;
 
     /**
+     * Database of redis used by PRKN.
+     * @var int
+     */
+    public static $redisDb;
+
+    /**
      * A file path is used to convert to a System V IPC key.
      * @var string
      */
@@ -180,7 +186,7 @@ class Prkn {
         !$redis->connect($redisConf->get('host')) && self::cliOutputExit('Redis Connection Fail.', true);
         $proxyProcessIds = self::$proxyProcessIds;
         try {
-            $redis->subscribe(['__keyevent@0__:expired'], function($pattern, $channel, $message) use ($proxyProcessIds) {
+            $redis->subscribe(['__keyevent@'.self::$redisDb.'__:expired'], function($pattern, $channel, $message) use ($proxyProcessIds) {
                 if (empty($proxyProcessIds) || !posix_kill($proxyProcessIds[0], 0)) {
                     isset($proxyProcessIds[0]) && self::$proxyProcessIds = [];
                     $errCode = 0;
@@ -382,6 +388,9 @@ class Prkn {
         self::$queue = msg_get_queue(self::$msgKey);
     }
 
+    /**
+     * Load config.
+     */
     protected static function loadConfig() {
         $config = Config::load(CONFIG_DIRECTORY.'prkn.php');
         $prknConfs = $config->all();
