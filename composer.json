@@ -1,4 +1,13 @@
 {
+    "name": "Prkn",
+    "description": "Multi processes PHP subscription client,",
+    "keywords": ["Multi processes", "redis", "subscribe", "Timed task"],
+    "authors": [
+        {
+            "name": "OwlSir",
+            "email": "xiuxiubiu@gmail.com"
+        }
+    ],
     "require": {
         "hassankhan/config": "^0.10.0"
     },

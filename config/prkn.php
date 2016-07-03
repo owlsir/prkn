@@ -26,8 +26,9 @@ return [
     // $desrireMsgType = $preemptive ? 0 : number;
     //'preemptive' => true,
 
-    // Database of redis used by PRKN.
-    'redisDb' => 0,
+    // Subscribe to channel.
+    // Support only one channel for a while.
+    'channel' => ['__keyevent@0__:expired'],
 ];
 
 
