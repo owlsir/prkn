@@ -2,7 +2,11 @@
 
 declare(ticks=1);
 
-namespace Core;
+namespace Prkn\Core;
+
+use \Noodlehaus\Config;
+use \Prkn\Handle\WorkerHandle;
+
 
 class Prkn {
 
@@ -13,7 +17,7 @@ class Prkn {
     public static $daemonize = false;
 
     /**
-     * A file path is used to convert to a System V IPC key;
+     * A file path is used to convert to a System V IPC key.
      * @var string
      */
     public static $ftokPath = '/tmp/prkn';
@@ -122,6 +126,8 @@ class Prkn {
      */
     protected static $pidPath = 'prkn.pid';
 
+    protected static $redis;
+
     /**
      * Run as a daemon
      */
@@ -160,7 +166,7 @@ class Prkn {
                 exit;
             }
             self::$proxyProcessIds[] = $pid;
-            usleep(1000);
+            usleep(1000000);
         }
     }
 
@@ -169,18 +175,22 @@ class Prkn {
      * @param int $pid proxy process id
      */
     protected static function redisSubscribe() {
-        $redis = new Redis();
-        $redis->connect('127.0.0.1');
-        $redis->subscribe(['__keyevent@0__:expired'], function($pattern, $channel, $message) {
-            if (posix_getpid() == self::$proxyProcessIds[0] || !posix_kill(self::$proxyProcessIds[0], 0)) {
-                $errCode = 0;
-                // need do something when the queue is blocking.
-                $numSign = self::$numSign+1;
-                msg_send(self::$queue, self::$numSign, $message, self::$queueSerialize, self::$queueBlocking, $errCode);
-                // update num sign in shared memory. $numSign is desired message type of worker process .
-                self::$numSign = $numSign%self::$workerCount;
-            }
-        });
+        $redisConf = Config::load(CONFIG_DIRECTORY.'redis.php');
+        $redis = new \Redis();
+        !$redis->connect($redisConf->get('host')) && self::cliOutputExit('Redis Connection Fail.', true);
+        $proxyProcessIds = self::$proxyProcessIds;
+        try {
+            $redis->subscribe(['__keyevent@0__:expired'], function($pattern, $channel, $message) use ($proxyProcessIds) {
+                if (empty($proxyProcessIds) || !posix_kill($proxyProcessIds[0], 0)) {
+                    isset($proxyProcessIds[0]) && self::$proxyProcessIds = [];
+                    $errCode = 0;
+                    msg_send(self::$queue, 1, $message, self::$queueSerialize, self::$queueBlocking, $errCode);
+                    // update num sign in shared memory. $numSign is desired message type of worker process.
+                }
+            });
+        } catch (\RedisException $e) {
+            exit;
+        }
     }
 
     /**
@@ -194,10 +204,10 @@ class Prkn {
             } else if (!$pid) {
                 pcntl_signal(SIGUSR2, [__CLASS__, 'workerStopCallBack']);
                 $workerProcessId = posix_getpid();
+                $handle = new WorkerHandle();
                 while(true) {
-                    $desrireMsgType = self::$preemptive ? 0 : array_search($workerProcessId, self::$workerProcessIds, true)+1;
-                    msg_receive(self::$queue, $desrireMsgType, $mesgtype, 100, $message, self::$queueSerialize, self::$msgRecFlag);
-
+                    msg_receive(self::$queue, 0, $mesgtype, 100, $message, self::$queueSerialize, self::$msgRecFlag);
+                    $handle->handle($message);
                     // ... do something ...
                     // file_put_contents('1.txt', $workerProcessId."--".$message."\n", FILE_APPEND);
 
@@ -360,7 +370,6 @@ class Prkn {
      */
     protected static function init() {
         !file_exists(self::$ftokPath) && !self::createFile(self::$ftokPath) && self::cliOutputExit('Failed to create tmp file.', true);
-        // self::$onFailRecord && !file_exists(self::$msgFailRrecordPath) && !self::createFile(self::$msgFailRrecordPath) && self::cliOutputExit('Failed to create the failed message log', true);
         !file_exists(self::$pidPath) && !self::createFile(self::$pidPath) && self::cliOutputExit('Failed to create pid file.', true);
 
         // get master process id
@@ -373,12 +382,21 @@ class Prkn {
         self::$queue = msg_get_queue(self::$msgKey);
     }
 
+    protected static function loadConfig() {
+        $config = Config::load(CONFIG_DIRECTORY.'prkn.php');
+        $prknConfs = $config->all();
+        foreach ($prknConfs as $key => $conf) {
+            self::$$key = $conf;
+        }
+    }
+
     /**
      * Start program.
      */
     public static function run() {
         self::init();
         self::command();
+        self::loadConfig();
         self::$daemonize && self::daemon();
         self::registerQuitSignal();
         self::masterProcess();
