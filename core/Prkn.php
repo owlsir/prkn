@@ -172,7 +172,7 @@ class Prkn {
                 exit;
             }
             self::$proxyProcessIds[] = $pid;
-            usleep(1000000);
+            usleep(1000);
         }
     }
 
